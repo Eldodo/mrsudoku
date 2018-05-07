@@ -7,8 +7,12 @@
 (defn values
   "Return the set of values of a vector or grid `cells`."
   [cells]
-  ;;; à compléter
-  nil)
+  (loop [cells cells res #{}]
+    (if (seq cells)
+      (recur (rest cells) (if (not (= (get (first cells) :value) nil))
+                            (conj res (get (first cells) :value))
+                            res))
+      res)))
 
 (fact
  (values (g/block sudoku-grid 1)) => #{5 3 6 9 8})
@@ -23,7 +27,7 @@
  (values (g/block sudoku-grid 8)) => #{4 1 9 8})
 
 (fact
- (values (g/row sudoku-grid 8)) => #{6 4 1 9 5})
+ (values (g/row sudoku-grid 8)) => #{4 1 9 5})
 
 (fact
  (values (g/col sudoku-grid 8)) => #{6 8 7})
@@ -32,11 +36,12 @@
   "Return the set of values of a vector of cells, except the `except`-th."
   [cells except]
   {:pre [(<= 1 except (count cells))]}
-  ;;; à compléter
-  nil)
+  (values (concat (subvec cells 0 (dec except)) (subvec cells except (count cells)))))
+
 
 (fact
  (values-except (g/block sudoku-grid 1) 1) => #{3 9 6 8})
+
 
 (fact
  (values-except (g/block sudoku-grid 1) 4) => #{3 9 5 8})
@@ -75,7 +80,7 @@
   (assoc conflict1 :kind (merge-conflict-kind (:kind conflict1) (:kind conflict2))))
 
 (defn merge-conflicts [& conflicts]
-  (apply (partial merge-with merge-conflict) conflicts)) 
+  (apply (partial merge-with merge-conflict) conflicts))
 
 (defn update-conflicts
   [conflict-kind cx cy value conflicts]
@@ -90,14 +95,22 @@
                (contains? (values-except values except) value))
       value)))
 
+
 (defn row-conflicts
   "Returns a map of conflicts in a `row`."
   [row cy]
-  ;;; à compléter
-  nil)
+  (loop [ind 1 res {}]
+    (if (<= ind (count row))
+      (if (= (:status (nth row (dec ind))) :set)
+        (if (contains? (values-except (into [] row) ind) (:value (nth row (dec ind))))
+          (recur (inc ind) (assoc res [ind cy] {:status :conflict, :kind :row, :value (:value (nth row (dec ind)))}))
+          (recur (inc ind) res))
+        (recur (inc ind) res))
+      res)))
 
 (fact
  (row-conflicts (map #(g/mk-cell :set %) [1 2 3 4]) 1) => {})
+
 
 (fact
  (row-conflicts (map #(g/mk-cell :set %) [1 2 3 1]) 1)
@@ -115,10 +128,27 @@
 (defn col-conflicts
   "Returns a map of conflicts in a `col`."
   [col cx]
-  ;;; à compléter
-  nil)
+  (loop [ind 1 res {}]
+    (if (<= ind (count col))
+      (if (= (:status (nth col (dec ind))) :set)
+        (if (contains? (values-except (into [] col) ind) (:value (nth col (dec ind))))
+          (recur (inc ind) (assoc res [cx ind] {:status :conflict, :kind :col, :value (:value (nth col (dec ind)))}))
+          (recur (inc ind) res))
+        (recur (inc ind) res))
+      res)))
 
-;;; Ecrire les 'fact'  nécessaires...
+(fact
+ (col-conflicts (map #(g/mk-cell :set %) [1 2 3 4]) 1) => {})
+
+
+(fact
+ (col-conflicts (map #(g/mk-cell :set %) [1 2 3 1]) 1)
+ => {[1 1] {:status :conflict, :kind :col, :value 1},
+     [1 4] {:status :conflict, :kind :col, :value 1}})
+
+(fact
+ (col-conflicts [{:status :init, :value 8} {:status :empty} {:status :empty} {:status :empty} {:status :init, :value 6} {:status :set, :value 6} {:status :empty} {:status :empty} {:status :init, :value 3}] 4)
+ => {[4 6] {:status :conflict, :kind :col, :value 6}})
 
 (defn cols-conflicts
   [grid] (reduce merge-conflicts {}
@@ -127,10 +157,33 @@
 
 (defn block-conflicts
   [block b]
-  ;;; à compléter
-  nil)
+  (loop [ind 1 res {}]
+    (if (<= ind (count block))
+      (if (= (:status (nth block (dec ind))) :set)
+        (if (contains? (values-except (into [] block) ind) (:value (nth block (dec ind))))
+          (recur (inc ind) (assoc res [(+ (* (rem (- b 1) 3) 3) (+ (rem (- ind 1) 3) 1)) (+ (* (quot (- b 1) 3) 3) (+ (quot (- ind 1) 3) 1))]
+                             {:status :conflict, :kind :block, :value (:value (nth block (dec ind)))}))
+          (recur (inc ind) res))
+        (recur (inc ind) res))
+      res)))
 
-;;; Ecrire les 'fact' nécessaires...
+(quot 5 3)
+
+(fact
+ (block-conflicts (map #(g/mk-cell :set %) [1 2 3 4]) 1) => {})
+
+(fact
+ (block-conflicts (map #(g/mk-cell :set %) [1 2 3 1]) 2)
+ => {[4 1] {:status :conflict, :kind :block, :value 1},
+     [4 2] {:status :conflict, :kind :block, :value 1}})
+
+(fact
+ (block-conflicts [{:status :init, :value 8} {:status :empty} {:status :empty} {:status :empty} {:status :init, :value 6} {:status :set, :value 6} {:status :empty} {:status :empty} {:status :init, :value 3}] 4)
+ => {[3 5] {:status :conflict, :kind :block, :value 6}})
+
+(defn cols-conflicts
+  [grid] (reduce merge-conflicts {}
+                 (map (fn [c] (col-conflicts (g/col grid c) c)) (range 1 10))))
 
 (defn blocks-conflicts
   [grid]
