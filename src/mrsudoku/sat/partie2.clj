@@ -144,16 +144,29 @@
 
 ;;;;;DCNF;;;;;;
 
-(defn dcnf_aux [f equivs]
-  (match f
-     ([op a b] :seq)
-         (let [[a' equivs1] (dcnf_aux a equivs)
-               [b' equivs2] (dcnf_aux b equivs1)
-               f' (list op a' b')]
-           (if-let [eq (get equivs2 f')]
-             [v equivs2]
-             (let [v (symbol (str "$"(inc (count equivs2))))]
-               [v (assoc equivs2 f' v)])))))
+(defn literal?
+  "est soit une negation d'une variable ou une variable"
+  [phi]
+  (or (symbol? phi)
+      (= phi true)
+      (= (first phi) 'not)))
+
+
+(defn dcnf'
+  [phi]
+  (if (literal? phi)
+    [phi, phi]
+    (let [[conn, G, D] phi
+          [vG, G'] (dcnf' G)
+          [vD, D'] (dcnf' D)
+          v (gensym "x")]
+      [v, (list 'and
+                (cnf (list '<=> v (list conn vG vD))) ;;appel a cnf-set ou!!! cnf la reecriture de (v <=> [conn, vG (varfraiche de G), vD (varfraiche de D)])
+                (list 'and G' D'))])))
+
+(defn dcnf [phi]
+  (let [[v, phi'] (dcnf' phi)]
+    (list 'and v phi')))
 
 
 ;; Remarque : f doit être en NNF
